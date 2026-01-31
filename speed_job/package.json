@@ -1,0 +1,56 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev --turbopack",
+    "start": "next start",
+    "seed": "ts-node seed.ts"
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@supabase/supabase-js": "^2.53.0",
+    "@tailwindcss/forms": "^0.5.10",
+    "@vercel/blob": "^1.1.1",
+    "@vercel/postgres": "^0.10.0",
+    "autoprefixer": "10.4.20",
+    "axios": "^1.11.0",
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.0.1",
+    "firebase": "^12.0.0",
+    "form-data": "^4.0.4",
+    "framer-motion": "^12.23.6",
+    "gsap": "^3.13.0",
+    "mime-types": "^3.0.1",
+    "next": "15.6.0-canary.58",
+    "next-auth": "5.0.0-beta.25",
+    "pg": "^8.16.3",
+    "postcss": "8.5.1",
+    "postgres": "^3.4.6",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "^3.0.2",
+    "tailwindcss": "3.4.17",
+    "use-debounce": "^10.0.4",
+    "zod": "^3.25.17"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/form-data": "^2.5.2",
+    "@types/mime-types": "^3.0.1",
+    "@types/node": "22.10.7",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "ts-node": "^10.9.2",
+    "typescript": "5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "bcrypt",
+      "sharp"
+    ]
+  }
+}
