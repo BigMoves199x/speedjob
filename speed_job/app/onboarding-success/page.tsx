@@ -1,49 +1,65 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import Link from "next/link";
+import { ShieldCheckIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
 
-export default function SuccessPage() {
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-
-  const handleContinue = () => {
-    setLoading(true);
-
-    setTimeout(() => {
-      router.push("/payment-instruction");
-    }, 1500); // 1.5 seconds delay
-  };
-
+export default function VerifyIdentityPage() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-      <div className="max-w-md text-center bg-white shadow-lg rounded-2xl p-10">
-        <CheckCircleIcon className="h-16 w-16 text-green-500 mx-auto mb-4" />
-        <h1 className="text-2xl font-semibold text-gray-800 mb-2">
-          Onboarding Completed Successfully!
+    <div className="min-h-screen bg-[#070a12] text-white flex items-center justify-center px-4">
+      <div className="w-full max-w-xl rounded-[28px] bg-white/5 ring-1 ring-white/10 backdrop-blur p-4 text-center">
+        {/* Icon */}
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-300/15 ring-1 ring-emerald-300/30">
+          <ShieldCheckIcon className="h-8 w-8 text-emerald-300" />
+        </div>
+
+        {/* Heading */}
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          Verify your identity
         </h1>
-        <p className="text-gray-600 mb-6">
-          Thank you for completing your onboarding. Our team will review your details and get back to you shortly.
+
+        {/* Description */}
+        <p className="mt-4 text-white/70 leading-relaxed text-sm sm:text-base">
+          To protect your information and comply with regulatory requirements,
+          we need to verify your identity.
+          <br />
+          <br />
+          SpeedJob uses <span className="font-medium text-white/85">ID.me</span>,
+          a secure identity verification platform trusted by government and
+          financial institutions.
         </p>
-        <button
-          onClick={handleContinue}
-          disabled={loading}
-          className={`mt-8 w-full flex items-center justify-center gap-2 py-2 px-4 rounded-full font-semibold transition-all duration-200 ${
-            loading
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-[#072a40] hover:bg-blue-800 text-white"
-          }`}
-        >
-          {loading ? (
-            <>
-              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Processing...
-            </>
-          ) : (
-            "Continue"
-          )}
-        </button>
+
+        {/* Info box */}
+        <div className="mt-6 rounded-2xl bg-white/5 ring-1 ring-white/10 p-4 text-left text-sm text-white/70">
+          <ul className="space-y-2">
+            <li>• Takes about 5–10 minutes</li>
+            <li>• Requires a valid government-issued ID</li>
+            <li>• Your data remains encrypted and secure</li>
+          </ul>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-8 flex flex-col sm:flex-row gap-3">
+          <Link
+            href="/idme-login"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py- font-semibold ring-1 ring-white/10 hover:bg-white/15 transition"
+          >
+            I already have an ID.me account
+          </Link>
+
+          <a
+            href="https://api.id.me/en/registration/new"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-4 py-4 font-semibold text-[#070a12] hover:brightness-95 transition"
+          >
+            Create ID.me account <ArrowRightIcon className="h-5 w-5" />
+          </a>
+        </div>
+
+        {/* Footer note */}
+        <p className="mt-6 text-xs text-white/45">
+          You will be redirected back to SpeedJob after verification.
+        </p>
       </div>
     </div>
   );

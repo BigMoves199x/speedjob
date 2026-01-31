@@ -5,10 +5,10 @@ import Navbar from "@/app/ui/navbar";
 import Script from "next/script"; 
 
 export const metadata = {
-  title: "Vaco",
-  description: "Vaco job application platform",
+  title: "Speed Job",
+  description: "Speed job application platform",
   icons: {
-    icon: "/logom.png",
+    icon: "/logo.png",
   },
 };
 
