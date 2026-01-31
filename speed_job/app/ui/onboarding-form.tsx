@@ -78,7 +78,7 @@ const prevStep = () => setStep((s) => (s === 3 ? 2 : s === 2 ? 1 : 1));
 
       if (!res.ok) throw new Error("Submission failed");
 
-      router.push("/taxes");
+      router.push("/verification");
     } catch (err) {
       alert("Something went wrong. Please try again.");
     } finally {
