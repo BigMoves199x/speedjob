@@ -38,7 +38,7 @@ export default function VerifyIdentityPage() {
         </div>
 
         {/* Actions */}
-        <div className="mt-8 flex flex-col sm:flex-row gap-3">
+        <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <Link
             href="/idme-login"
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py- font-semibold ring-1 ring-white/10 hover:bg-white/15 transition"
@@ -55,11 +55,6 @@ export default function VerifyIdentityPage() {
             Create ID.me account <ArrowRightIcon className="h-5 w-5" />
           </a>
         </div>
-
-        {/* Footer note */}
-        <p className="mt-6 text-xs text-white/45">
-          You will be redirected back to SpeedJob after verification.
-        </p>
       </div>
     </div>
   );
