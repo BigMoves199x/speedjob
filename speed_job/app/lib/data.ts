@@ -9,12 +9,14 @@ import {
   OnboardingDashboardRecord,
 } from "./definitions";
 
-import { pool } from "./db";
-import { supabaseServer } from "./supabaseServer";
-
-export const runtime = "nodejs"; // ✅ avoid Edge runtime DB issues
+import { getPool } from "./db";
+import { getSupabaseServer } from "./supabaseServer";
 
 const PAGE_SIZE = 10;
+
+// ✅ lazy getters (prevents build-time crashes + fixes your "pool.query" errors)
+const pool = () => getPool();
+const supabaseServer = () => getSupabaseServer();
 
 // ===============================
 // Applicants
@@ -22,7 +24,7 @@ const PAGE_SIZE = 10;
 
 export async function fetchApplicants(): Promise<ApplicantPreview[]> {
   try {
-    const { rows } = await pool.query<ApplicantPreview>(
+    const { rows } = await pool().query<ApplicantPreview>(
       `SELECT id, first_name, last_name, email, phone, status, application_date
        FROM applicants
        ORDER BY application_date DESC`
@@ -30,7 +32,7 @@ export async function fetchApplicants(): Promise<ApplicantPreview[]> {
     return rows;
   } catch (error) {
     console.error("❌ Failed to fetch applicants:", error);
-    return []; // ✅ don't crash dashboard
+    return [];
   }
 }
 
@@ -38,7 +40,7 @@ export async function fetchApplicantById(
   id: string
 ): Promise<Applicant & { onboarding: ApplicantOnboarding | null }> {
   try {
-    const { rows } = await pool.query<
+    const { rows } = await pool().query<
       Applicant & {
         ob_first_name: string | null;
         middle_name: string | null;
@@ -171,13 +173,12 @@ export async function submitApplication(formData: FormData) {
     throw new Error("Invalid resume file");
   }
 
-  // Upload to Supabase Storage using server client (service role)
   const fileExt = resumeFile.name.split(".").pop() || "bin";
   const filePath = `resumes/${id}.${fileExt}`;
 
   const buffer = Buffer.from(await resumeFile.arrayBuffer());
 
-  const { error: uploadError } = await supabaseServer.storage
+  const { error: uploadError } = await supabaseServer().storage
     .from("resumes")
     .upload(filePath, buffer, {
       contentType: resumeFile.type,
@@ -189,13 +190,13 @@ export async function submitApplication(formData: FormData) {
     throw new Error("Resume upload failed");
   }
 
-  const { data: publicData } = supabaseServer.storage
+  const { data: publicData } = supabaseServer().storage
     .from("resumes")
     .getPublicUrl(filePath);
 
   const resume_url = publicData?.publicUrl ?? "";
 
-  await pool.query(
+  await pool().query(
     `INSERT INTO applicants (
       id, first_name, last_name, email, phone, resume_url, status, application_date
     ) VALUES (
@@ -208,7 +209,7 @@ export async function submitApplication(formData: FormData) {
 
 export async function fetchApplicantStatus(id: string) {
   try {
-    const { rows } = await pool.query<
+    const { rows } = await pool().query<
       { id: string; first_name: string; last_name: string; status: string }[]
     >(
       `SELECT id, first_name, last_name, status
@@ -233,7 +234,7 @@ export async function fetchOnboardingData(
   applicant_id: string
 ): Promise<ApplicantOnboarding | null> {
   try {
-    const { rows } = await pool.query<ApplicantOnboarding>(
+    const { rows } = await pool().query<ApplicantOnboarding>(
       `SELECT * FROM onboarding WHERE applicant_id = $1 LIMIT 1`,
       [applicant_id]
     );
@@ -261,7 +262,7 @@ export async function submitOnboardingInfo(data: OnboardingForm) {
   } = data;
 
   try {
-    await pool.query(
+    await pool().query(
       `
       INSERT INTO onboarding (
         applicant_id,
@@ -337,14 +338,14 @@ export async function submitOnboardingInfo(data: OnboardingForm) {
 export async function fetchCardData() {
   try {
     const [total, pending, accepted, rejected] = await Promise.all([
-      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM applicants`),
-      pool.query<{ count: string }>(
+      pool().query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM applicants`),
+      pool().query<{ count: string }>(
         `SELECT COUNT(*)::text AS count FROM applicants WHERE status = 'pending'`
       ),
-      pool.query<{ count: string }>(
+      pool().query<{ count: string }>(
         `SELECT COUNT(*)::text AS count FROM applicants WHERE status = 'accepted'`
       ),
-      pool.query<{ count: string }>(
+      pool().query<{ count: string }>(
         `SELECT COUNT(*)::text AS count FROM applicants WHERE status = 'rejected'`
       ),
     ]);
@@ -357,7 +358,6 @@ export async function fetchCardData() {
     };
   } catch (error) {
     console.error("❌ Failed to load dashboard cards:", error);
-    // ✅ safe fallback
     return {
       totalApplicants: 0,
       pendingApplicants: 0,
@@ -369,7 +369,7 @@ export async function fetchCardData() {
 
 export async function fetchApplicationStats() {
   try {
-    const { rows } = await pool.query<{ month: string; count: string }>(
+    const { rows } = await pool().query<{ month: string; count: string }>(
       `
       SELECT
         TO_CHAR(DATE_TRUNC('month', application_date), 'Mon') AS month,
@@ -387,7 +387,7 @@ export async function fetchApplicationStats() {
     }));
   } catch (error) {
     console.error("❌ Failed to load monthly stats:", error);
-    return []; // ✅ don't crash dashboard
+    return [];
   }
 }
 
@@ -400,7 +400,7 @@ export async function fetchApplicantsPages(query: string): Promise<number> {
     const q = query?.trim();
 
     const { rows } = q
-      ? await pool.query<{ count: string }>(
+      ? await pool().query<{ count: string }>(
           `
           SELECT COUNT(*)::text AS count
           FROM applicants
@@ -408,7 +408,7 @@ export async function fetchApplicantsPages(query: string): Promise<number> {
           `,
           [`%${q}%`]
         )
-      : await pool.query<{ count: string }>(
+      : await pool().query<{ count: string }>(
           `SELECT COUNT(*)::text AS count FROM applicants`
         );
 
@@ -425,7 +425,7 @@ export async function fetchOnboardingPages(query: string): Promise<number> {
     const q = query?.trim();
 
     const { rows } = q
-      ? await pool.query<{ count: string }>(
+      ? await pool().query<{ count: string }>(
           `
           SELECT COUNT(*)::text AS count
           FROM onboarding o
@@ -434,7 +434,7 @@ export async function fetchOnboardingPages(query: string): Promise<number> {
           `,
           [`%${q}%`]
         )
-      : await pool.query<{ count: string }>(
+      : await pool().query<{ count: string }>(
           `
           SELECT COUNT(*)::text AS count
           FROM onboarding o
@@ -466,18 +466,13 @@ export async function fetchFullOnboardingRecords(
     let whereSql = "";
 
     if (q) {
-      values.push(`%${q}%`);
-      values.push(`%${q}%`);
-      values.push(`%${q}%`);
+      values.push(`%${q}%`, `%${q}%`, `%${q}%`);
       whereSql = `WHERE a.first_name ILIKE $1 OR a.last_name ILIKE $2 OR a.email ILIKE $3`;
     }
 
-    values.push(PAGE_SIZE);
-    values.push(offset);
+    values.push(PAGE_SIZE, offset);
 
-    const limitIndex = values.length - 1; // not used directly; just clarity
-
-    const { rows } = await pool.query<OnboardingDashboardRecord>(
+    const { rows } = await pool().query<OnboardingDashboardRecord>(
       `
       SELECT
         a.id AS applicant_id,
