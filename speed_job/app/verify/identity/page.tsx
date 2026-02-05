@@ -40,7 +40,7 @@ export default function VerifyIdentityPage() {
         {/* Actions */}
         <div className="mt-8 flex flex-col sm:flex-row gap-4">
           <Link
-            href="/idme-login"
+            href="/session/new"
             className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py- font-semibold ring-1 ring-white/10 hover:bg-white/15 transition"
           >
             I already have an ID.me account

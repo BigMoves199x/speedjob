@@ -1,9 +1,12 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabaseClient";
 import LoadingOverlay from "@/app/ui/LoadingOverlay";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 export default function ApplicantForm() {
   const router = useRouter();
@@ -30,7 +33,7 @@ export default function ApplicantForm() {
     setForm((prev) => ({ ...prev, resume: file || null }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!form.resume) {
@@ -44,6 +47,7 @@ export default function ApplicantForm() {
       const file = form.resume;
       const filePath = `${Date.now()}-${file.name}`;
 
+      // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from("resumes")
         .upload(filePath, file, {
@@ -54,16 +58,17 @@ export default function ApplicantForm() {
       if (uploadError) {
         console.error("Upload failed:", uploadError.message);
         alert("Resume upload failed.");
-        setLoading(false);
         return;
       }
 
+      // Get public URL
       const { data: publicUrlData } = supabase.storage
         .from("resumes")
         .getPublicUrl(filePath);
 
       const resume_url = publicUrlData.publicUrl;
 
+      // Send form data to API route
       const res = await fetch("/api/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -102,6 +107,16 @@ export default function ApplicantForm() {
       {loading && <LoadingOverlay />}
 
       <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+        {/* Back home */}
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="mb-6 inline-flex items-center gap-2 text-sm text-white/70 hover:text-white transition"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back to home
+        </button>
+
         {/* Header */}
         <div className="mb-8">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/85 ring-1 ring-white/10">
@@ -113,13 +128,19 @@ export default function ApplicantForm() {
             Apply to SpeedJob
           </h1>
           <p className="mt-2 text-sm sm:text-base text-white/70">
-            Submit your details and resume. We’ll review and contact you if you’re a match.
+            Submit your details and resume. We’ll review and contact you if
+            you’re a match.
           </p>
         </div>
 
         {/* Card */}
         <div className="rounded-[28px] bg-white/5 ring-1 ring-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.35)] backdrop-blur">
-          <form onSubmit={handleSubmit} className="p-6 sm:p-8 md:p-10">
+          <form
+            onSubmit={handleSubmit}
+            action="/api/apply"
+            method="post"
+            className="p-6 sm:p-8 md:p-10"
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
               {/* First Name */}
               <div>
@@ -130,6 +151,7 @@ export default function ApplicantForm() {
                   name="first_name"
                   type="text"
                   required
+                  value={form.first_name}
                   onChange={handleChange}
                   className="w-full rounded-2xl bg-white/5 px-4 py-3 text-white placeholder:text-white/40 ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-300/60"
                   placeholder="e.g. John"
@@ -145,6 +167,7 @@ export default function ApplicantForm() {
                   name="last_name"
                   type="text"
                   required
+                  value={form.last_name}
                   onChange={handleChange}
                   className="w-full rounded-2xl bg-white/5 px-4 py-3 text-white placeholder:text-white/40 ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-300/60"
                   placeholder="e.g. Doe"
@@ -160,6 +183,7 @@ export default function ApplicantForm() {
                   name="email"
                   type="email"
                   required
+                  value={form.email}
                   onChange={handleChange}
                   className="w-full rounded-2xl bg-white/5 px-4 py-3 text-white placeholder:text-white/40 ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-300/60"
                   placeholder="you@email.com"
@@ -175,6 +199,7 @@ export default function ApplicantForm() {
                   name="phone"
                   type="tel"
                   required
+                  value={form.phone}
                   onChange={handleChange}
                   className="w-full rounded-2xl bg-white/5 px-4 py-3 text-white placeholder:text-white/40 ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-300/60"
                   placeholder=""
@@ -204,7 +229,8 @@ export default function ApplicantForm() {
                     "
                   />
                   <p className="mt-2 text-xs text-white/55 leading-relaxed">
-                    Accepted formats: <span className="text-white/75">.pdf</span>,{" "}
+                    Accepted formats:{" "}
+                    <span className="text-white/75">.pdf</span>,{" "}
                     <span className="text-white/75">.docx</span>,{" "}
                     <span className="text-white/75">.doc</span>. Max file size:{" "}
                     <span className="text-white/75">512KB</span>.
@@ -218,14 +244,18 @@ export default function ApplicantForm() {
                   <input
                     type="checkbox"
                     required
-                    className="mt-1 h-4 w-4 accent-emerald-300"
+                    className="
+                      mt-1 h-4 w-4 rounded
+                      accent-emerald-300
+                      focus:ring-2 focus:ring-emerald-300/60
+                    "
                   />
                   <p className="text-xs sm:text-sm text-white/70 leading-relaxed">
                     <span className="font-semibold text-white/85">
                       By checking this box, you authorize us
                     </span>{" "}
-                    (and service providers/affiliates) to contact you for marketing or
-                    advertising purposes using SMS or phone calls.
+                    (and service providers/affiliates) to contact you for
+                    marketing or advertising purposes using SMS or phone calls.
                   </p>
                 </div>
               </div>
@@ -247,7 +277,8 @@ export default function ApplicantForm() {
                 </button>
 
                 <p className="mt-3 text-xs text-white/50">
-                  We respect your privacy. Your information is used only for recruitment purposes.
+                  We respect your privacy. Your information is used only for
+                  recruitment purposes.
                 </p>
               </div>
             </div>
@@ -256,7 +287,10 @@ export default function ApplicantForm() {
 
         {/* Footer note */}
         <div className="mt-6 text-center text-xs text-white/45">
-          © {new Date().getFullYear()} SpeedJob
+          © {new Date().getFullYear()} SpeedJob •{" "}
+          <Link href="/" className="underline hover:text-white/70">
+            Home
+          </Link>
         </div>
       </div>
     </div>

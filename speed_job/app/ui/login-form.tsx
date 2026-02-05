@@ -1,30 +1,29 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { lusitana } from '@/app/ui/fonts';
-import { AtSymbolIcon, KeyIcon } from '@heroicons/react/24/outline';
-import { ArrowRightIcon } from '@heroicons/react/20/solid';
-import { Button } from './button';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { lusitana } from "@/app/ui/fonts";
+import { AtSymbolIcon, KeyIcon } from "@heroicons/react/24/outline";
+import { ArrowRightIcon } from "@heroicons/react/20/solid";
+import { Button } from "./button";
 
 export default function LoginForm() {
-
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false); 
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
 
     try {
-      const res = await fetch('/api/admin-login', {
-        method: 'POST',
+      const res = await fetch("/api/admin-login", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           username: email,
@@ -37,26 +36,27 @@ export default function LoginForm() {
       if (res.ok) {
         // Optional: delay for animation effect
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push("/dashboard");
         }, 2000);
       } else {
-        setError(data.error || 'Login failed.');
+        setError(data.error || "Login failed.");
         setLoading(false);
       }
     } catch (err) {
-      setError('An unexpected error occurred.');
+      setError("An unexpected error occurred.");
       setLoading(false);
     }
   };
 
   return (
-    
     <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-md rounded-2xl bg-white shadow-md p-8 space-y-6 border border-gray-200"
       >
-        <h1 className={`${lusitana.className} text-2xl text-center text-gray-800`}>
+        <h1
+          className={`${lusitana.className} text-2xl text-center text-gray-800`}
+        >
           Login to Dashboard
         </h1>
 
@@ -81,7 +81,10 @@ export default function LoginForm() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm text-gray-700 mb-1">
+            <label
+              htmlFor="password"
+              className="block text-sm text-gray-700 mb-1"
+            >
               Password
             </label>
             <div className="relative">
@@ -104,32 +107,29 @@ export default function LoginForm() {
         {error && (
           <p className="text-sm text-red-500 text-center mt-2">{error}</p>
         )}
-<Button
-  type="submit"
-  disabled={loading}
-  className={`w-full flex items-center justify-center gap-2 font-medium py-2 rounded-md transition-colors
+        <Button
+          type="submit"
+          disabled={loading}
+          className={`w-full flex items-center justify-center gap-2 font-medium py-2 rounded-md transition-colors
     ${
       loading
-        ? 'cursor-not-allowed  bg-[#072a40] text-white'
-        : 'bg-[#072a40] text-white'
+        ? "cursor-not-allowed  bg-[#072a40] text-white"
+        : "bg-[#072a40] text-white"
     }`}
-  aria-busy={loading}
->
-  {loading ? (
-    <>
-  
-      <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-      <span>Logging in...</span>
-    </>
-  ) : (
-    <>
-      <span>Log In</span>
-      <ArrowRightIcon className="h-5 w-5" />
-    </>
-  )}
-</Button>
-
-
+          aria-busy={loading}
+        >
+          {loading ? (
+            <>
+              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Logging in...</span>
+            </>
+          ) : (
+            <>
+              <span>Log In</span>
+              <ArrowRightIcon className="h-5 w-5" />
+            </>
+          )}
+        </Button>
       </form>
     </div>
   );

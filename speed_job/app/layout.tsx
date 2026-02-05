@@ -1,7 +1,6 @@
 import "@/app/ui/global.css";
 import { inter } from "@/app/ui/fonts";
 
-import Navbar from "@/app/ui/navbar";
 import Script from "next/script"; 
 
 export const metadata = {
