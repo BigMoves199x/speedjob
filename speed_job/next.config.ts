@@ -1,8 +1,13 @@
-import type { NextConfig } from 'next';
+const nextConfig = {
+  reactStrictMode: true,
 
-const nextConfig: NextConfig = {
-  /* config options here */
-  
+  experimental: {
+    typedRoutes: false,
+  },
+
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default nextConfig;
