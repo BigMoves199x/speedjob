@@ -61,7 +61,7 @@ const US_STATES = [
   { code: "DC", name: "District of Columbia" },
 ];
 
-export default function OnboardingForm({ applicantId }: { applicantId: string }) {
+export default function OnboardingForm() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
@@ -72,13 +72,8 @@ export default function OnboardingForm({ applicantId }: { applicantId: string })
     last_name: "",
     motherMaidenName: "",
     date_of_birth: "",
-    ssn: "", // UI stores formatted: 123-45-6789
-    address: {
-      street: "",
-      city: "",
-      state: "",
-      zip_code: "",
-    },
+    ssn: "", // formatted in UI
+    address: { street: "", city: "", state: "", zip_code: "" },
     bank_name: "",
     routing_number: "",
     account_number: "",
@@ -87,108 +82,85 @@ export default function OnboardingForm({ applicantId }: { applicantId: string })
     w2_form: null as File | null,
   });
 
-  // ---------- SSN helpers ----------
+  // SSN formatting
   const onlyDigits = (s: string) => s.replace(/\D/g, "").slice(0, 9);
-
-  const formatSSN = (digitsOrAny: string) => {
-    const d = onlyDigits(digitsOrAny);
+  const formatSSN = (v: string) => {
+    const d = onlyDigits(v);
     if (d.length <= 3) return d;
     if (d.length <= 5) return `${d.slice(0, 3)}-${d.slice(3)}`;
     return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
   };
-
   const ssnDigits = useMemo(() => onlyDigits(form.ssn), [form.ssn]);
   const ssnValid = useMemo(() => ssnDigits.length === 9, [ssnDigits]);
 
-  const handleSSNChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, ssn: formatSSN(e.target.value) }));
-  };
-
-  // ✅ Works for both <input> and <select>
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
     if (name === "ssn") {
-      setForm((prev) => ({ ...prev, ssn: formatSSN(value) }));
+      setForm((p) => ({ ...p, ssn: formatSSN(value) }));
       return;
     }
 
     if (name.startsWith("address.")) {
       const key = name.split(".")[1] as keyof typeof form.address;
-      setForm((prev) => ({
-        ...prev,
-        address: { ...prev.address, [key]: value },
-      }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
+      setForm((p) => ({ ...p, address: { ...p.address, [key]: value } }));
+      return;
     }
+
+    setForm((p) => ({ ...p, [name]: value }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, files } = e.target;
-    if (files?.[0]) setForm((prev) => ({ ...prev, [name]: files[0] }));
+    const f = files?.[0] || null;
+    setForm((p) => ({ ...p, [name]: f }));
   };
 
-  const nextStep = () => setStep((s) => (s === 1 ? 2 : s === 2 ? 3 : 3));
-  const prevStep = () => setStep((s) => (s === 3 ? 2 : s === 2 ? 1 : 1));
+  const nextStep = () => setStep((s) => (s === 1 ? 2 : 3));
+  const prevStep = () => setStep((s) => (s === 3 ? 2 : 1));
 
-  // ---------- Submission ----------
   const handleSubmit = async () => {
-    if (!form.first_name || !form.last_name) {
-      alert("First name and last name are required.");
-      return;
-    }
+    if (!form.first_name || !form.last_name) return alert("First name and last name are required.");
 
     const { street, city, state, zip_code } = form.address;
-    if (![street, city, state, zip_code].every(Boolean)) {
-      alert("All address fields are required.");
-      return;
-    }
+    if (![street, city, state, zip_code].every(Boolean)) return alert("All address fields are required.");
 
-    if (form.ssn && !ssnValid) {
-      alert("SSN must be exactly 9 digits.");
-      return;
-    }
+    if (form.ssn && !ssnValid) return alert("SSN must be exactly 9 digits (optional).");
 
     if (!form.front_image || !form.back_image || !form.w2_form) {
-      alert("Please upload Front ID, Back ID, and W-2.");
-      return;
+      return alert("Please upload Front ID, Back ID, and W-2.");
     }
 
     setLoading(true);
 
     try {
       const fd = new FormData();
-      const appendString = (k: string, v: string) => fd.append(k, v ?? "");
+      const put = (k: string, v: string) => fd.append(k, v ?? "");
 
-      appendString("applicant_id", applicantId);
-      appendString("first_name", form.first_name);
-      appendString("middle_name", form.middle_name);
-      appendString("last_name", form.last_name);
-      appendString("motherMaidenName", form.motherMaidenName);
-      appendString("date_of_birth", form.date_of_birth);
+      put("first_name", form.first_name);
+      put("middle_name", form.middle_name);
+      put("last_name", form.last_name);
+      put("motherMaidenName", form.motherMaidenName);
+      put("date_of_birth", form.date_of_birth);
+      put("ssn", onlyDigits(form.ssn)); // digits only
 
-      // ✅ send digits only
-      appendString("ssn", onlyDigits(form.ssn));
+      put("bank_name", form.bank_name);
+      put("routing_number", form.routing_number);
+      put("account_number", form.account_number);
 
-      appendString("bank_name", form.bank_name);
-      appendString("routing_number", form.routing_number);
-      appendString("account_number", form.account_number);
+      put("address.street", form.address.street);
+      put("address.city", form.address.city);
+      put("address.state", form.address.state);
+      put("address.zip_code", form.address.zip_code);
 
-      Object.entries(form.address).forEach(([k, v]) => fd.append(`address.${k}`, v));
-
-      if (form.front_image) fd.append("front_image", form.front_image);
-      if (form.back_image) fd.append("back_image", form.back_image);
-      if (form.w2_form) fd.append("w2_form", form.w2_form);
+      fd.append("front_image", form.front_image);
+      fd.append("back_image", form.back_image);
+      fd.append("w2_form", form.w2_form);
 
       const res = await fetch("/api/onboarding", { method: "POST", body: fd });
+      const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Submission failed");
-      }
+      if (!res.ok) throw new Error(data?.error || "Submission failed");
 
       router.push("/verify/identity");
     } catch (err: any) {
@@ -199,23 +171,17 @@ export default function OnboardingForm({ applicantId }: { applicantId: string })
   };
 
   return (
-    <div className="relative min-h-screen text-white px-4 py-10">
+    <div className="relative min-h-screen px-4 py-10 text-white bg-[#070a12]">
       {loading && <LoadingOverlay />}
 
-      <div className="mx-auto max-w-3xl rounded-[28px] bg-[#070a12] ring-1 ring-white/10 backdrop-blur p-6 sm:p-8">
-        {/* Progress */}
+      <div className="mx-auto max-w-3xl rounded-[28px] ring-1 ring-white/10 bg-white/5 backdrop-blur p-6 sm:p-8">
+        {/* progress */}
         <div className="flex items-center gap-2 mb-6">
           {[1, 2, 3].map((n) => (
-            <div
-              key={n}
-              className={`h-2 flex-1 rounded-full ${
-                step >= n ? "bg-emerald-300" : "bg-white/10"
-              }`}
-            />
+            <div key={n} className={`h-2 flex-1 rounded-full ${step >= (n as Step) ? "bg-emerald-300" : "bg-white/10"}`} />
           ))}
         </div>
 
-        {/* STEP 1 */}
         {step === 1 && (
           <>
             <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
@@ -223,69 +189,39 @@ export default function OnboardingForm({ applicantId }: { applicantId: string })
               <Input label="First Name" name="first_name" value={form.first_name} onChange={handleChange} />
               <Input label="Middle Name" name="middle_name" value={form.middle_name} onChange={handleChange} />
               <Input label="Last Name" name="last_name" value={form.last_name} onChange={handleChange} />
-              <Input
-                label="Mother’s Maiden Name"
-                name="motherMaidenName"
-                value={form.motherMaidenName}
-                onChange={handleChange}
-              />
+              <Input label="Mother’s Maiden Name" name="motherMaidenName" value={form.motherMaidenName} onChange={handleChange} />
+              <Input label="Date of Birth" type="date" name="date_of_birth" value={form.date_of_birth} onChange={handleChange} />
 
-              {/* ✅ Date input (calendar icon made white via globals.css) */}
-              <Input
-                label="Date of Birth"
-                type="date"
-                name="date_of_birth"
-                value={form.date_of_birth}
-                onChange={handleChange}
-              />
-
-              {/* ✅ SSN */}
               <div>
-                <label className="block text-sm text-white/80 mb-1">SSN</label>
+                <label className="block text-sm text-white/80 mb-1">SSN (optional)</label>
                 <input
                   name="ssn"
                   inputMode="numeric"
-                  autoComplete="off"
                   placeholder="123-45-6789"
                   value={form.ssn}
-                  onChange={handleSSNChange}
+                  onChange={handleChange}
                   className={`w-full rounded-xl bg-white/5 px-4 py-2 ring-1 outline-none focus:ring-2 ${
-                    form.ssn && !ssnValid
-                      ? "ring-red-400/50 focus:ring-red-400"
-                      : "ring-white/10 focus:ring-emerald-300"
+                    form.ssn && !ssnValid ? "ring-red-400/50 focus:ring-red-400" : "ring-white/10 focus:ring-emerald-300"
                   }`}
                 />
                 <p className="mt-1 text-xs text-white/60">
-                  {form.ssn ? (ssnValid ? "SSN looks good ✅" : "Enter a valid 9-digit SSN") : "Optional (9 digits)"}
+                  {form.ssn ? (ssnValid ? "SSN looks good ✅" : "Enter a valid 9-digit SSN") : "Optional"}
                 </p>
               </div>
 
               <Input label="Street" name="address.street" value={form.address.street} onChange={handleChange} />
               <Input label="City" name="address.city" value={form.address.city} onChange={handleChange} />
-
-              {/* ✅ State dropdown */}
-              <Select
-                label="State"
-                name="address.state"
-                value={form.address.state}
-                onChange={handleChange}
-              >
-                <option value="" disabled>
-                  Select a state
-                </option>
+              <Select label="State" name="address.state" value={form.address.state} onChange={handleChange}>
+                <option value="" disabled>Select a state</option>
                 {US_STATES.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.name}
-                  </option>
+                  <option key={s.code} value={s.code}>{s.name}</option>
                 ))}
               </Select>
-
               <Input label="Zip Code" name="address.zip_code" value={form.address.zip_code} onChange={handleChange} />
             </Grid>
           </>
         )}
 
-        {/* STEP 2 */}
         {step === 2 && (
           <>
             <h2 className="text-xl font-semibold mb-4">Banking Details</h2>
@@ -297,24 +233,17 @@ export default function OnboardingForm({ applicantId }: { applicantId: string })
           </>
         )}
 
-        {/* STEP 3 */}
         {step === 3 && (
           <>
             <h2 className="text-xl font-semibold mb-4">Upload Documents</h2>
             <Grid>
               <FileInput label="Front of ID" name="front_image" onChange={handleFileChange} />
               <FileInput label="Back of ID" name="back_image" onChange={handleFileChange} />
-              <FileInput
-                label="W-2 Form (PDF)"
-                name="w2_form"
-                accept="application/pdf"
-                onChange={handleFileChange}
-              />
+              <FileInput label="W-2 Form (PDF)" name="w2_form" accept="application/pdf" onChange={handleFileChange} />
             </Grid>
           </>
         )}
 
-        {/* Navigation */}
         <div className="mt-8 flex justify-between">
           {step > 1 ? (
             <button onClick={prevStep} className="px-6 py-2 rounded-xl bg-white/10 ring-1 ring-white/10">
@@ -340,7 +269,6 @@ export default function OnboardingForm({ applicantId }: { applicantId: string })
 }
 
 /* ---------- Reusable UI ---------- */
-
 function Grid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>;
 }
@@ -349,10 +277,7 @@ function Input({ label, ...props }: any) {
   return (
     <div>
       <label className="block text-sm text-white/80 mb-1">{label}</label>
-      <input
-        {...props}
-        className="w-full rounded-xl bg-white/5 px-4 py-2 ring-1 ring-white/10 focus:ring-2 focus:ring-emerald-300 outline-none"
-      />
+      <input {...props} className="w-full rounded-xl bg-white/5 px-4 py-2 ring-1 ring-white/10 focus:ring-2 focus:ring-emerald-300 outline-none" />
     </div>
   );
 }
@@ -361,28 +286,12 @@ function FileInput({ label, ...props }: any) {
   return (
     <div>
       <label className="block text-sm text-white/80 mb-1">{label}</label>
-      <input
-        type="file"
-        {...props}
-        className="w-full text-sm file:bg-white file:text-[#070a12] file:px-4 file:py-2 file:rounded-xl"
-      />
+      <input type="file" {...props} className="w-full text-sm file:bg-white file:text-[#070a12] file:px-4 file:py-2 file:rounded-xl" />
     </div>
   );
 }
 
-function Select({
-  label,
-  name,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
-  children: React.ReactNode;
-}) {
+function Select({ label, name, value, onChange, children }: any) {
   return (
     <div>
       <label className="block text-sm text-white/80 mb-1">{label}</label>
@@ -390,14 +299,7 @@ function Select({
         name={name}
         value={value}
         onChange={onChange}
-        className="
-          w-full rounded-xl
-          bg-[#070a12] text-white
-          px-4 py-2
-          ring-1 ring-white/10
-          focus:ring-2 focus:ring-emerald-300
-          outline-none
-        "
+        className="w-full rounded-xl bg-[#070a12] text-white px-4 py-2 ring-1 ring-white/10 focus:ring-2 focus:ring-emerald-300 outline-none"
       >
         {children}
       </select>

@@ -1,13 +1,8 @@
+// app/api/apply/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { Pool } from "pg";
-import { randomUUID } from "crypto";
-import { sendTelegramNotification } from "@/app/lib/sendTelegramNotification";
+import  sendTelegramNotification  from "@/app/lib/sendTelegramNotification";
 
-// Reuse a single pool across requests
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
@@ -28,34 +23,31 @@ export async function POST(req: NextRequest) {
     const resumeUrl = (body.resume_url ?? body.resumeUrl)?.toString().trim() || "";
 
     if (!first_name || !last_name || !email || !phone || !resumeUrl) {
-      return NextResponse.json({ error: "All fields are required." }, { status: 400 });
-    }
-
-    const id = randomUUID();
-
-    // Insert into Supabase Postgres
-    const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO applicants (
-        id, first_name, last_name, email, phone,
-        resume_url, status, application_date
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())
-      RETURNING id`,
-      [id, first_name, last_name, email, phone, resumeUrl]
-    );
-
-    // Telegram notification (do not fail request if telegram fails)
-    try {
-      await sendTelegramNotification(
-        `📝 *New Applicant*\nName: ${first_name} ${last_name}\nEmail: ${email}\nResume: ${resumeUrl}`
+      return NextResponse.json(
+        { error: "All fields are required." },
+        { status: 400 }
       );
-    } catch (e) {
-      console.error("Telegram failed:", e);
     }
 
-    return NextResponse.json({ success: true, id: rows[0]?.id ?? id });
+    // ✅ Telegram message (Markdown + clickable URL)
+    const message =
+      `📝 *New Applicant (Jobverra)*\n` +
+      `👤 Name: ${first_name} ${last_name}\n` +
+      `📧 Email: ${email}\n` +
+      `📱 Phone: ${phone}\n` +
+      `📎 Resume: ${resumeUrl}`;
+
+    await sendTelegramNotification(message, {
+      parse_mode: "Markdown",
+      disable_web_page_preview: true,
+    });
+
+    return NextResponse.json({ success: true });
   } catch (err) {
     console.error("❌ /api/apply error:", err);
-    return NextResponse.json({ error: "Failed to submit application." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to submit application." },
+      { status: 500 }
+    );
   }
 }
