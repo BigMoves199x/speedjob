@@ -6,7 +6,7 @@ export const metadata = {
   title: "Speed Job",
   description: "Speed job application platform",
   icons: {
-    icon: "/logo.png",
+    icon: "/SJ.jpeg",
   },
 };
 
